@@ -1,5 +1,7 @@
 # r/place 2022 — interactive replay
 
+**[Open the interactive replay](https://brudsau.github.io/rplace-replay/)**
+
 A static replay of the shared canvas, prepared for Bruno Sales's presentation
 *New Frontiers and the Reallocation of Conflict*, Insper, 29 October 2026.
 
