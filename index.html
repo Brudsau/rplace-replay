@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r/place 2022 | Insper replay</title>
+<style>
+:root{color-scheme:light;--ink:#172d45;--blue:#2368b5;--muted:#737d87;--line:#dce0e6}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:18px system-ui,Arial,sans-serif}
+main{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:20px 34px;gap:14px}
+header{display:flex;align-items:center;justify-content:space-between;gap:20px}h1{font-size:23px;margin:0;font-weight:650}
+.meta{font-size:15px;color:var(--muted)}button,select{font:inherit;color:inherit;background:#fff;border:1px solid var(--line);padding:8px 13px;border-radius:4px;cursor:pointer}
+button:hover,button:focus-visible{border-color:var(--blue);color:var(--blue)}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #a5c9ee;outline-offset:3px}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 225px;gap:30px;min-height:0;align-items:center}
+.canvaswrap{height:100%;min-height:0;overflow:hidden;display:grid;place-items:center;touch-action:none;background:#f6f7f8;position:relative}
+canvas{width:100%;height:100%;object-fit:contain;cursor:grab}canvas:active{cursor:grabbing}
+aside{align-self:center}aside h2{font-size:26px;line-height:1.15;margin:0 0 22px}aside p{margin:0 0 20px;color:var(--muted);line-height:1.5;font-size:16px}
+#dimensions{color:var(--blue);font-size:27px;font-weight:650;margin:0 0 12px}
+.controls{border-top:1px solid var(--line);padding-top:14px}.time{display:flex;justify-content:space-between;align-items:baseline;gap:15px;font-variant-numeric:tabular-nums}
+output{font-size:22px;font-weight:600}#position{font-size:14px;color:var(--muted)}input[type=range]{width:100%;margin:14px 0;accent-color:var(--blue);cursor:ew-resize;height:24px}
+.buttons{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.buttons .spacer{flex:1}.primary{background:var(--blue);color:white;border-color:var(--blue);min-width:90px}.primary:hover{color:white;background:#18558f}
+.speed{font-size:15px;display:flex;gap:8px;align-items:center}.foot{font-size:12px;color:var(--muted);margin:10px 0 0}#error{color:#a02b20;position:absolute;max-width:75%;background:white;padding:15px;border:1px solid #a02b20}
+@media(max-width:850px){main{padding:12px 16px}.stage{grid-template-columns:1fr}aside{display:none}h1{font-size:19px}.meta{font-size:12px}button,select{font-size:14px;padding:6px 8px}output{font-size:17px}.foot{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>r/place <span class="meta">2022</span></h1><span class="meta">New Frontiers and the Reallocation of Conflict</span><button id="fullscreen" aria-label="Toggle fullscreen">Full screen</button></header>
+<div class="stage">
+<div class="canvaswrap"><canvas id="canvas" aria-label="The shared canvas at the selected time"></canvas><div id="error" role="alert" hidden></div></div>
+<aside><h2 id="phase">The original canvas</h2><div id="dimensions">1,000 × 1,000</div><p>One pixel per user,<br>every five minutes.</p><p>Anyone can paint<br>anywhere.</p><p class="meta">Scroll to zoom.<br>Drag to pan.<br>Space to play or pause.</p></aside>
+</div>
+<div class="controls">
+<div class="time"><output id="time" for="timeline">Loading…</output><span id="position"></span></div>
+<input type="range" id="timeline" aria-label="Game timeline" min="0" max="499" value="163" step="1">
+<div class="buttons">
+<button id="play" class="primary" aria-label="Play replay">Play</button>
+<button id="back" aria-label="Previous ten-minute snapshot">←</button><button id="next" aria-label="Next ten-minute snapshot">→</button>
+<button data-jump="start">Start</button><button data-jump="right">Surprise opening</button><button data-jump="bottom">Expected opening</button>
+<span class="spacer"></span>
+<label class="speed">Speed <select id="speed" aria-label="Playback speed"><option value="2">2 frames/s</option><option value="7" selected>7 frames/s</option><option value="12">12 frames/s</option></select></label>
+<button id="reset">Reset zoom</button>
+</div>
+<p class="foot">Local historical replay · snapshots every 10 minutes · UTC · display sampled at 1,000 × 1,000 pixels · Space: play/pause · arrows: step · F: full screen · R: reset zoom</p>
+</div>
+</main>
+<script src="frames.js"></script>
+<script>
+'use strict';
+const model=window.TIMELINE, slider=document.getElementById('timeline'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+const output=document.getElementById('time'),position=document.getElementById('position'),playButton=document.getElementById('play'), error=document.getElementById('error');
+let index=163, playing=false, timer=null, current=null, request=0, zoom=1, panX=0, panY=0, drag=null;
+const images=new Map();
+function imageAt(i){
+ if(images.has(i))return images.get(i);
+ const promise=new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Could not load a replay frame. Keep the frames folder next to this page.'));img.src=model.frames[i].src;});
+ images.set(i,promise);if(images.size>30){for(const key of images.keys()){if(Math.abs(key-index)>10)images.delete(key);if(images.size<=22)break;}}
+ return promise;
+}
+function draw(){
+ const box=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+ canvas.width=Math.round(box.width*dpr);canvas.height=Math.round(box.height*dpr);
+ ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#f6f7f8';ctx.fillRect(0,0,box.width,box.height);if(!current)return;
+ const side=Math.min(box.width,box.height)*zoom;
+ ctx.imageSmoothingEnabled=false;ctx.drawImage(current,(box.width-side)/2+panX,(box.height-side)/2+panY,side,side);
+}
+function stop(){playing=false;clearTimeout(timer);playButton.textContent='Play';playButton.setAttribute('aria-label','Play replay');}
+async function show(i){
+ i=Math.max(0,Math.min(model.frames.length-1,Number(i)));index=i;slider.value=String(i);const token=++request;
+ const f=model.frames[i],d=new Date(f.timestamp);
+ output.textContent=d.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'})+' UTC';
+ slider.setAttribute('aria-valuetext',output.textContent);
+ position.textContent=`${i+1} / ${model.frames.length}`;
+ document.getElementById('dimensions').textContent=f.width.toLocaleString('en-US')+' × '+f.height.toLocaleString('en-US');
+ document.getElementById('phase').textContent=f.width===1000?'The original canvas':f.height===1000?'The surprise opening':'The expected opening';
+ try{const img=await imageAt(i);if(token!==request)return;current=img;error.hidden=true;draw();}
+ catch(e){if(token===request){stop();error.textContent=e.message;error.hidden=false;}}
+ for(let j=i+1;j<=Math.min(i+5,model.frames.length-1);j++)imageAt(j).catch(()=>{});
+}
+async function tick(){if(!playing)return;if(index>=model.frames.length-1){stop();return;}await show(index+1);if(playing)timer=setTimeout(tick,1000/Number(document.getElementById('speed').value));}
+function toggle(){if(playing){stop();return;}if(index===model.frames.length-1)index=0;playing=true;playButton.textContent='Pause';playButton.setAttribute('aria-label','Pause replay');tick();}
+function reset(){zoom=1;panX=0;panY=0;draw();}
+function step(delta){stop();show(index+delta);}
+slider.addEventListener('input',()=>{stop();show(slider.value);});playButton.addEventListener('click',toggle);
+document.getElementById('back').addEventListener('click',()=>step(-1));document.getElementById('next').addEventListener('click',()=>step(1));document.getElementById('reset').addEventListener('click',reset);
+document.querySelectorAll('[data-jump]').forEach(b=>b.addEventListener('click',()=>{stop();reset();show({start:0,right:163,bottom:323}[b.dataset.jump]);}));
+async function fullscreen(){try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen();}catch(e){document.getElementById('fullscreen').textContent='Use F11';}}
+document.getElementById('fullscreen').addEventListener('click',fullscreen);
+window.addEventListener('resize',draw);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(1,Math.min(12,zoom*Math.exp(-e.deltaY*.001)));if(zoom===1){panX=0;panY=0;}draw();},{passive:false});
+canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,px:panX,py:panY};canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(!drag)return;panX=drag.px+e.clientX-drag.x;panY=drag.py+e.clientY-drag.y;draw();});
+canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});
+document.addEventListener('keydown',e=>{if(['INPUT','SELECT','BUTTON'].includes(e.target.tagName))return;
+ if(e.code==='Space'){e.preventDefault();toggle();}else if(e.key==='ArrowRight'){e.preventDefault();step(1);}else if(e.key==='ArrowLeft'){e.preventDefault();step(-1);}else if(e.key.toLowerCase()==='r'){reset();}else if(e.key.toLowerCase()==='f'){fullscreen();}});
+show(index);
+</script>
+</body></html>
